@@ -40,6 +40,7 @@ type FeatureConfig struct {
 	Facts       *bool `yaml:"facts,omitempty"`
 	Interfaces  *bool `yaml:"interfaces,omitempty"`
 	Optics      *bool `yaml:"optics,omitempty"`
+	Mactable    *bool `yaml:"mactable,omitempty"`
 }
 
 // New creates a new config
@@ -84,6 +85,9 @@ func Load(reader io.Reader) (*Config, error) {
 		if d.Features.Optics == nil {
 			d.Features.Optics = c.Features.Optics
 		}
+		if d.Features.Mactable == nil {
+			d.Features.Mactable = c.Features.Mactable
+		}
 	}
 
 	return c, nil
@@ -106,6 +110,8 @@ func (c *Config) setDefaultValues() {
 	f.Interfaces = &interfaces
 	optics := true
 	f.Optics = &optics
+	mactable := true
+	f.Mactable = &mactable
 }
 
 // DevicesFromTargets creates devices configs from targets list
