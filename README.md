@@ -28,6 +28,7 @@ environment | Environment (temperatures, state of power supply) | NX-OS/IOS XE/I
 facts | System informations (OS Version, memory: total/used/free, cpu: 5s/1m/5m/interrupts) | IOS XE/IOS
 interfaces | Interfaces (transmitted/received: bytes/errors/drops, admin/oper state) | NX-OS (*_drops is always 0)/IOS XE/IOS
 optics | Optical signals (tx/rx) | NX-OS/IOS XE/IOS
+mactable | MAC address table (count of MAC addresses per VLAN) | NX-OS
 
 ## Install
 ```bash
@@ -76,6 +77,7 @@ features:
   facts: true
   interfaces: true
   optics: true
+  mactable: true
 
 ```
 
