@@ -3,6 +3,7 @@ package optics
 import (
 	"log"
 	"regexp"
+	"strings"
 
 	"github.com/lwlcom/cisco_exporter/rpc"
 
@@ -50,7 +51,7 @@ func (c *opticsCollector) Collect(client *rpc.Client, ch chan<- prometheus.Metri
 	case rpc.IOS, rpc.IOSXE:
 		iflistcmd = "show interfaces stats | exclude disabled"
 	case rpc.NXOS:
-		iflistcmd = "show interface status | exclude disabled | exclude notconn | exclude sfpAbsent | exclude --------------------------------------------------------------------------------"
+		iflistcmd = "show interface status | exclude disabled | exclude notconn | exclude sfpAbsent | exclude xcvrAbsen | exclude --------------------------------------------------------------------------------"
 	}
 	out, err := client.RunCommand(iflistcmd)
 
@@ -66,12 +67,22 @@ func (c *opticsCollector) Collect(client *rpc.Client, ch chan<- prometheus.Metri
 	}
 
 	xeDev, _ := regexp.Compile(`\S(\d+)/(\d+)/(\d+)`)
+	// Devices starting from Po, Vlan should be skipped, they wont have optics
+	noOptics := []string{"Po", "Vlan"}
 
 	for _, i := range interfaces {
 		switch client.OSType {
 		case rpc.IOS:
 			out, err = client.RunCommand("show interfaces " + i + " transceiver")
 		case rpc.NXOS:
+			if len(i) == 0 {
+				continue
+			}
+			for _, no := range noOptics {
+				if strings.HasPrefix(i, no) {
+					continue
+				}
+			}
 			out, err = client.RunCommand("show interface " + i + " transceiver details")
 		case rpc.IOSXE:
 			matches := xeDev.FindStringSubmatch(i)
