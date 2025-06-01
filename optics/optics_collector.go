@@ -71,17 +71,18 @@ func (c *opticsCollector) Collect(client *rpc.Client, ch chan<- prometheus.Metri
 	noOptics := []string{"Po", "Vlan"}
 
 	for _, i := range interfaces {
+		for _, no := range noOptics {
+			if strings.HasPrefix(i, no) {
+				continue
+			}
+		}
+
 		switch client.OSType {
 		case rpc.IOS:
 			out, err = client.RunCommand("show interfaces " + i + " transceiver")
 		case rpc.NXOS:
 			if len(i) == 0 {
 				continue
-			}
-			for _, no := range noOptics {
-				if strings.HasPrefix(i, no) {
-					continue
-				}
 			}
 			out, err = client.RunCommand("show interface " + i + " transceiver details")
 		case rpc.IOSXE:
