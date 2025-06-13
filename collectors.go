@@ -9,6 +9,7 @@ import (
 	"github.com/lwlcom/cisco_exporter/facts"
 	"github.com/lwlcom/cisco_exporter/interfaces"
 	"github.com/lwlcom/cisco_exporter/optics"
+	"github.com/lwlcom/cisco_exporter/mactable"
 )
 
 type collectors struct {
@@ -40,7 +41,7 @@ func (c *collectors) initCollectorsForDevice(device *connector.Device) {
 	c.addCollectorIfEnabledForDevice(device, "facts", f.Facts, facts.NewCollector)
 	c.addCollectorIfEnabledForDevice(device, "interfaces", f.Interfaces, interfaces.NewCollector)
 	c.addCollectorIfEnabledForDevice(device, "optics", f.Optics, optics.NewCollector)
-
+	c.addCollectorIfEnabledForDevice(device, "mactable", f.Mactable, mactable.NewCollector)
 }
 
 func (c *collectors) addCollectorIfEnabledForDevice(device *connector.Device, key string, enabled *bool, newCollector func() collector.RPCCollector) {

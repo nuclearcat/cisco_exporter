@@ -34,6 +34,7 @@ var (
 	factsEnabled       = flag.Bool("facts.enabled", true, "Scrape system metrics")
 	interfacesEnabled  = flag.Bool("interfaces.enabled", true, "Scrape interface metrics")
 	opticsEnabled      = flag.Bool("optics.enabled", true, "Scrape optic metrics")
+	mactableEnabled    = flag.Bool("mactable.enabled", true, "Scrape mactable metrics")
 	configFile         = flag.String("config.file", "", "Path to config file")
 	devices            []*connector.Device
 	cfg                *config.Config
@@ -113,6 +114,7 @@ func loadConfigFromFlags() *config.Config {
 	f.Facts = factsEnabled
 	f.Interfaces = interfacesEnabled
 	f.Optics = opticsEnabled
+	f.Mactable = mactableEnabled
 
 	return c
 }

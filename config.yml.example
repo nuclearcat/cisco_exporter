@@ -25,3 +25,5 @@ features:
   facts: true
   interfaces: true
   optics: true
+  mactable: true
+
