@@ -2,10 +2,10 @@ package mactable
 
 import (
 	"errors"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
-	"log"
 
 	"github.com/lwlcom/cisco_exporter/rpc"
 )
@@ -36,7 +36,7 @@ func (c *mactableCollector) ParseVlans(ostype string, output string) ([]int, err
 	if ostype != rpc.NXOS {
 		return nil, errors.New("mactable is not implemented yet for " + ostype)
 	}
-	
+
 	vlans := make([]int, 0)
 	vlanRegexp := regexp.MustCompile(`^\s*(\d+)\s+`)
 	lines := strings.Split(output, "\n")
