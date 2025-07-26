@@ -2,9 +2,9 @@ package connector
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"regexp"
 	"strings"
 
 	"time"
@@ -67,6 +67,19 @@ type SSHConnection struct {
 	session      *ssh.Session
 	batchSize    int
 	clientConfig *ssh.ClientConfig
+	outCh        chan string // delivers one response per command
+}
+
+func (c *SSHConnection) readLoop() {
+	rdr := bufio.NewReader(c.stdout)
+	for {
+		line, err := rdr.ReadString('\n')
+		if err != nil {
+			close(c.outCh)
+			return
+		}
+		c.outCh <- strings.TrimPrefix(line, "\r") // drop solitary CR
+	}
 }
 
 // Connect connects to the device
@@ -84,39 +97,78 @@ func (c *SSHConnection) Connect() error {
 	}
 	c.stdin, _ = session.StdinPipe()
 	c.stdout, _ = session.StdoutPipe()
+
 	modes := ssh.TerminalModes{
-		ssh.ECHO:  0,
-		ssh.OCRNL: 0,
+		ssh.ECHO:          0,
+		ssh.OCRNL:         0,
+		ssh.TTY_OP_ISPEED: 115200,
+		ssh.TTY_OP_OSPEED: 115200,
 	}
-	session.RequestPty("vt100", 0, 2000, modes)
+	session.RequestPty("vt100", 80, 2000, modes)
 	session.Shell()
+
+	// single reader goroutine
+	c.outCh = make(chan string, 4) // buffered channel to avoid blocking
+
+	go c.readLoop()                      // ONLY reader touching StdoutPipe
+	_, _ = io.WriteString(c.stdin, "\n") // wake NX‑OS and maybe IOS devices
+
+	select {
+	case <-c.outCh: // discard, just unblocks reader
+	case <-time.After(c.clientConfig.Timeout):
+		return fmt.Errorf("device never presented a prompt")
+	}
+
 	c.session = session
 
-	c.RunCommand("")
+	//c.RunCommand("")
 	c.RunCommand("terminal length 0")
 
 	return nil
 }
 
-type result struct {
-	output string
-	err    error
-}
-
-// RunCommand runs a command against the device
 func (c *SSHConnection) RunCommand(cmd string) (string, error) {
-	buf := bufio.NewReader(c.stdout)
-	io.WriteString(c.stdin, cmd+"\n")
+	tag := fmt.Sprintf("__END_%d__", time.Now().UnixNano())
 
-	outputChan := make(chan result)
-	go func() {
-		c.readln(outputChan, cmd, buf)
-	}()
-	select {
-	case res := <-outputChan:
-		return res.output, res.err
-	case <-time.After(c.clientConfig.Timeout):
-		return "", errors.New("Timeout reached")
+	// real command + sentinel comment (needs no privilege)
+	if _, err := fmt.Fprintf(c.stdin, "%s\n!%s\n", cmd, tag); err != nil {
+		return "", err
+	}
+
+	var (
+		buf      strings.Builder
+		deadline = time.After(c.clientConfig.Timeout)
+	)
+
+	for {
+		select {
+		case line := <-c.outCh:
+			clean := strings.TrimSpace(line)
+
+			switch {
+			// 1. line is the sentinel comment → finished (don’t copy it)
+			case strings.HasSuffix(clean, "!"+tag):
+				allstr := buf.String()
+				// if it is empty, keep going, we are not done yet (and dont append to buf)
+				// On NX-OS, it will echo tag at the beginning of the output
+				if allstr == "" {
+					continue
+				}
+				//log.Printf("Command{%s}: %s\n", c.Host, allstr)
+				return strings.ReplaceAll(allstr, "\r", "\n"), nil
+
+			// 2. line is the command echo → ignore it
+			case strings.HasSuffix(clean, cmd):
+				continue
+
+			// 3. normal payload
+			default:
+				buf.WriteString(line)
+			}
+
+		case <-deadline:
+			return "", errors.New("timeout reached")
+		}
 	}
 }
 
@@ -143,22 +195,4 @@ func loadPrivateKey(r io.Reader) (ssh.AuthMethod, error) {
 	}
 
 	return ssh.PublicKeys(key), nil
-}
-
-func (c *SSHConnection) readln(ch chan result, cmd string, r io.Reader) {
-	re := regexp.MustCompile(`.+#\s?$`)
-	buf := make([]byte, c.batchSize)
-	loadStr := ""
-	for {
-		n, err := r.Read(buf)
-		if err != nil {
-			ch <- result{output: "", err: err}
-		}
-		loadStr += string(buf[:n])
-		if strings.Contains(loadStr, cmd) && re.MatchString(loadStr) {
-			break
-		}
-	}
-	loadStr = strings.Replace(loadStr, "\r", "", -1)
-	ch <- result{output: loadStr, err: nil}
 }

@@ -44,7 +44,8 @@ func (c *Client) Identify() error {
 	case strings.Contains(output, "IOS Software"):
 		c.OSType = IOS
 	default:
-		return errors.New("Unknown OS")
+		errmsg := fmt.Sprintf("Unknown OS for device %s: %s", c.conn.Host, output)
+		return errors.New(errmsg)
 	}
 	if c.Debug {
 		log.Printf("Host %s identified as: %s\n", c.conn.Host, c.OSType)
