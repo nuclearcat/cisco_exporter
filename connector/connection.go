@@ -227,7 +227,7 @@ func (c *SSHConnection) RunCommand(cmd string) (string, error) {
 
 // Close closes connection
 func (c *SSHConnection) Close() {
-	if c.client.Conn == nil {
+	if c.client == nil || c.client.Conn == nil {
 		return
 	}
 	c.client.Conn.Close()
