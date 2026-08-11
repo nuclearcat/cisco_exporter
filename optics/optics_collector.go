@@ -67,14 +67,14 @@ func (c *opticsCollector) Collect(client *rpc.Client, ch chan<- prometheus.Metri
 	}
 
 	xeDev, _ := regexp.Compile(`\S(\d+)/(\d+)/(\d+)`)
-	// Devices starting from Po, Vlan should be skipped, they wont have optics
-	noOptics := []string{"Po", "Vlan"}
+	// Port-channels and VLAN interfaces never have a transceiver. Devices spell
+	// them either short (Po103) or long (port-channel103), so match folded: the
+	// "po" prefix covers both spellings.
+	noOptics := []string{"po", "vlan"}
 
 	for _, i := range interfaces {
-		for _, no := range noOptics {
-			if strings.HasPrefix(i, no) {
-				continue
-			}
+		if hasPrefixFold(i, noOptics) {
+			continue
 		}
 
 		switch client.OSType {
@@ -112,4 +112,16 @@ func (c *opticsCollector) Collect(client *rpc.Client, ch chan<- prometheus.Metri
 	}
 
 	return nil
+}
+
+// hasPrefixFold reports whether s starts with any of the prefixes, ignoring
+// case. Prefixes must be given in lower case.
+func hasPrefixFold(s string, prefixes []string) bool {
+	s = strings.ToLower(s)
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
