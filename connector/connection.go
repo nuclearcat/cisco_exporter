@@ -135,14 +135,26 @@ func (c *SSHConnection) RunCommand(cmd string) (string, error) {
 		return "", err
 	}
 
-	var (
-		buf      strings.Builder
-		deadline = time.After(c.clientConfig.Timeout)
-	)
+	var buf strings.Builder
+
+	// The timeout is an idle timeout, not a budget for the whole response: a
+	// large "show interface" on a busy chassis streams for far longer than any
+	// sane per-command limit, but it never goes quiet for long. Reset the timer
+	// on every line so we only give up when the device actually stops talking.
+	idle := time.NewTimer(c.clientConfig.Timeout)
+	defer idle.Stop()
 
 	for {
 		select {
 		case line := <-c.outCh:
+			if !idle.Stop() {
+				select {
+				case <-idle.C:
+				default:
+				}
+			}
+			idle.Reset(c.clientConfig.Timeout)
+
 			clean := strings.TrimSpace(line)
 
 			switch {
@@ -166,7 +178,7 @@ func (c *SSHConnection) RunCommand(cmd string) (string, error) {
 				buf.WriteString(line)
 			}
 
-		case <-deadline:
+		case <-idle.C:
 			return "", errors.New("timeout reached")
 		}
 	}
