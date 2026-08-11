@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"strings"
+	"sync"
 
 	"time"
 
@@ -68,6 +69,25 @@ type SSHConnection struct {
 	batchSize    int
 	clientConfig *ssh.ClientConfig
 	outCh        chan string // delivers one response per command
+
+	mu     sync.Mutex
+	broken bool // set once the command stream can no longer be trusted
+}
+
+// markBroken records that the response stream is out of sync with the commands
+// being issued, so the connection must not be used for anything else.
+func (c *SSHConnection) markBroken() {
+	c.mu.Lock()
+	c.broken = true
+	c.mu.Unlock()
+}
+
+// Broken reports whether the connection has been abandoned mid-command and has
+// to be torn down instead of reused.
+func (c *SSHConnection) Broken() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.broken
 }
 
 func (c *SSHConnection) readLoop() {
@@ -128,6 +148,13 @@ func (c *SSHConnection) Connect() error {
 }
 
 func (c *SSHConnection) RunCommand(cmd string) (string, error) {
+	// Once a command has been abandoned its unread output is still queued, so
+	// anything issued afterwards would be answered with the previous command's
+	// tail. Refuse instead of returning data that belongs to another command.
+	if c.Broken() {
+		return "", errors.New("connection is out of sync after an aborted command")
+	}
+
 	tag := fmt.Sprintf("__END_%d__", time.Now().UnixNano())
 
 	// real command + sentinel comment (needs no privilege)
@@ -179,6 +206,10 @@ func (c *SSHConnection) RunCommand(cmd string) (string, error) {
 			}
 
 		case <-idle.C:
+			// The sentinel for this command was never seen, so its remaining
+			// output stays in the stream and would be misread as the answer to
+			// whatever runs next.
+			c.markBroken()
 			return "", errors.New("timeout reached")
 		}
 	}
