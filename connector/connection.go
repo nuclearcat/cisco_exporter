@@ -134,7 +134,10 @@ func (c *SSHConnection) Connect() error {
 	_, _ = io.WriteString(c.stdin, "\n") // wake NX‑OS and maybe IOS devices
 
 	select {
-	case <-c.outCh: // discard, just unblocks reader
+	case _, ok := <-c.outCh: // discard, just unblocks reader
+		if !ok {
+			return fmt.Errorf("session closed before a prompt appeared")
+		}
 	case <-time.After(c.clientConfig.Timeout):
 		return fmt.Errorf("device never presented a prompt")
 	}
@@ -173,7 +176,14 @@ func (c *SSHConnection) RunCommand(cmd string) (string, error) {
 
 	for {
 		select {
-		case line := <-c.outCh:
+		case line, ok := <-c.outCh:
+			if !ok {
+				// readLoop closes the channel when the session ends; without
+				// this the receive would succeed instantly forever and spin
+				// the CPU until the idle timeout expired.
+				c.markBroken()
+				return "", errors.New("connection closed")
+			}
 			if !idle.Stop() {
 				select {
 				case <-idle.C:
